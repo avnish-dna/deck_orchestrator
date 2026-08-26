@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import json
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -33,6 +34,25 @@ def check(severity, name, ok, detail=""):
     results.append((severity, name, bool(ok), detail))
 
 
+def resolve_node_module(module_name: str, node: str | None) -> tuple[bool, str]:
+    if not node:
+        return False, "not checked - node is missing"
+    probe = subprocess.run(
+        [node, "-e", f"console.log(require.resolve({module_name!r}))"],
+        capture_output=True,
+        text=True,
+        cwd=REPO,
+    )
+    if probe.returncode == 0:
+        return True, probe.stdout.strip() or "resolvable"
+    detail = (probe.stderr or probe.stdout).strip() or f"{module_name} is not resolvable"
+    lines = [line.strip() for line in detail.splitlines() if line.strip()]
+    for line in lines:
+        if "Cannot find module" in line or line.startswith("Error:"):
+            return False, line
+    return False, lines[0] if lines else detail
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--brand", default=None, help="brand pack the run will use")
@@ -41,8 +61,11 @@ def main():
     # 1. Binaries. Node runs the persisted pptxgenjs build script; python runs
     # the check scripts. LibreOffice/pdftoppm only degrade Fiona's render path.
     check(BLOCK, "binary: python", True, sys.executable)
-    check(BLOCK, "binary: node", shutil.which("node"),
-          shutil.which("node") or "missing - needed to run the pptxgenjs build script")
+    node = shutil.which("node")
+    check(BLOCK, "binary: node", node,
+          node or "missing - needed to run the pptxgenjs build script")
+    pptxgenjs_ok, pptxgenjs_detail = resolve_node_module("pptxgenjs", node)
+    check(BLOCK, "node module: pptxgenjs", pptxgenjs_ok, pptxgenjs_detail)
     soffice = shutil.which("soffice") or shutil.which("libreoffice")
     check(WARN, "binary: soffice (LibreOffice)", soffice,
           soffice or "missing - Fiona's ground-truth render degrades; "
