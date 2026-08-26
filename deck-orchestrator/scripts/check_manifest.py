@@ -148,11 +148,9 @@ def figure_matches(raw, transform, shown):
     try:
         if s.endswith("%"):
             target = float(s[:-1])
-            # After transform, effective should already be in % units.
-            # Support both: if transform was applied and result > 1, use directly;
-            # if raw was already a fraction and no transform matched, scale here.
-            if effective <= 1:
-                effective = effective * 100
+            # After transform, effective must already be in % units.
+            # If no transform keyword matched, effective == raw; the comparison
+            # will correctly fail and surface the misconfigured row.
             return abs(round(effective) - target) <= 0.5
         if s.startswith("$") and s.lower().endswith("m"):
             target = float(s[1:-1])
@@ -218,10 +216,11 @@ def assembly_blockers(m):
         if not frozen:
             b.append(f"gate: exhibit {x['exhibit_id']} Cooper chart is not frozen")
 
-    # 4e. All slides (except cover/closer) must be branded or frozen
+    # 4e. All slides (except template-managed sections) must be branded or frozen
     SLIDE_READY = {"branded", "frozen"}
+    SLIDE_EXEMPT_SECTIONS = {"cover", "closer", "appendix"}
     for s in m.get("slides", []):
-        if s.get("section") in ("cover",):
+        if s.get("section") in SLIDE_EXEMPT_SECTIONS:
             continue
         if s.get("status") not in SLIDE_READY:
             b.append(f"gate: slide {s['slide_id']} status is '{s.get('status')}' "

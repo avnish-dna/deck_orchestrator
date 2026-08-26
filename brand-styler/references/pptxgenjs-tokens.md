@@ -17,9 +17,11 @@ const path = require("path");
 //   const manifest = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
 const brand = manifest.meta.brand;   // e.g. "aurecon"
 
-// Resolve the brand-styler directory relative to this file's location.
-// Adjust BRAND_STYLER_ROOT if your layout differs.
-const BRAND_STYLER_ROOT = path.resolve(__dirname, "..", "brand-styler", "brands");
+// Pass the brand-styler root as an environment variable or CLI argument so
+// the generator is not coupled to a specific directory layout.
+// e.g. BRAND_STYLER_ROOT=/path/to/brand-styler/brands node build_deck.js manifest.json
+const BRAND_STYLER_ROOT = process.env.BRAND_STYLER_ROOT
+  || (() => { throw new Error("BRAND_STYLER_ROOT env var is required"); })();
 const PACK_DIR = path.join(BRAND_STYLER_ROOT, brand);
 const T = JSON.parse(fs.readFileSync(path.join(PACK_DIR, "tokens.json"), "utf8"));
 
