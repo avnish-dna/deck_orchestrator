@@ -125,8 +125,8 @@ def assembly_blockers(m):
         if s.get("verification") != "verified":
             b.append(f"gate: source {s['source_id']} is {s.get('verification')} "
                      f"(claim: {s.get('claim', '')})")
-        if s.get("relevance_ok") is False:
-            b.append(f"gate: source {s['source_id']} judged irrelevant to its claim")
+        if s.get("relevance_ok") is not True:
+            b.append(f"gate: source {s['source_id']} has not been judged relevant to its claim")
     for f in m.get("figures", []):
         if f.get("verification") != "verified":
             b.append(f"gate: figure {f['figure_id']} ({f.get('shown')}) is {f.get('verification')}")
