@@ -60,8 +60,22 @@ def schema_errors(m):
 def ref_errors(m):
     def ids(coll):
         return {it[ID_FIELD[coll]] for it in m.get(coll, [])}
+
+    def dup_ids(coll):
+        all_ids = [it[ID_FIELD[coll]] for it in m.get(coll, []) if ID_FIELD[coll] in it]
+        return [i for i in set(all_ids) if all_ids.count(i) > 1]
+
     e = []
     sl, ex, sr = ids("slides"), ids("exhibits"), ids("sources")
+    fi = ids("figures")
+    sm_ids = {sm["source_material_id"] for sm in m.get("inputs", {}).get("source_materials", [])
+              if "source_material_id" in sm}
+
+    # Duplicate collection IDs
+    for coll in ("slides", "exhibits", "figures", "sources", "decisions", "scrutiny"):
+        for dup in dup_ids(coll):
+            e.append(f"ref: duplicate {ID_FIELD[coll]} '{dup}' in {coll}")
+
     for s in m.get("slides", []):
         if s.get("exhibit_id") and s["exhibit_id"] not in ex:
             e.append(f"ref: slide {s['slide_id']} -> missing exhibit {s['exhibit_id']}")
@@ -69,13 +83,31 @@ def ref_errors(m):
             if c not in sr:
                 e.append(f"ref: slide {s['slide_id']} cites missing source {c}")
     for x in m.get("exhibits", []):
-        if x["slide_id"] not in sl:
+        if x.get("slide_id") and x["slide_id"] not in sl:
             e.append(f"ref: exhibit {x['exhibit_id']} -> missing slide {x['slide_id']}")
+        for fid in x.get("figure_ids") or []:
+            if fid not in fi:
+                e.append(f"ref: exhibit {x['exhibit_id']} -> missing figure {fid}")
+        anchor = (x.get("data_ref") or {}).get("anchor") or {}
+        smid = anchor.get("source_material_id")
+        if smid and smid not in sm_ids:
+            e.append(f"ref: exhibit {x['exhibit_id']} anchor -> missing source_material {smid}")
     for f in m.get("figures", []):
+        if f.get("slide_id") and f["slide_id"] not in sl:
+            e.append(f"ref: figure {f['figure_id']} -> missing slide {f['slide_id']}")
         if f.get("citation") and f["citation"] not in sr:
             e.append(f"ref: figure {f['figure_id']} cites missing source {f['citation']}")
         if f.get("exhibit_id") and f["exhibit_id"] not in ex:
             e.append(f"ref: figure {f['figure_id']} -> missing exhibit {f['exhibit_id']}")
+        smid = (f.get("anchor") or {}).get("source_material_id")
+        if smid and smid not in sm_ids:
+            e.append(f"ref: figure {f['figure_id']} anchor -> missing source_material {smid}")
+    for s in m.get("sources", []):
+        if s.get("source_material_id") and s["source_material_id"] not in sm_ids:
+            e.append(f"ref: source {s['source_id']} -> missing source_material {s['source_material_id']}")
+        for sid in s.get("used_on") or []:
+            if sid not in sl:
+                e.append(f"ref: source {s['source_id']} used_on missing slide {sid}")
     nums = [s["citation"] for s in m.get("sources", []) if s.get("citation")]
     if len(nums) != len(set(nums)):
         e.append("ref: duplicate citation numbers in sources")
@@ -83,20 +115,50 @@ def ref_errors(m):
 
 
 # ---- 3. figure arithmetic (Edward's mechanical half) -----------------------
+# Supported transforms: applied to raw source_value before display comparison.
+# Format: a dict mapping transform-keyword -> callable(raw) -> float
+_TRANSFORMS = {
+    "* 100":      lambda v: v * 100,
+    "/ 1e6":      lambda v: v / 1e6,
+    "* 1e-6":     lambda v: v / 1e6,
+    "share":      lambda v: v * 100,   # share of count -> whole %
+    "pct":        lambda v: v * 100,
+    "%":          lambda v: v * 100,
+}
+
+
+def _apply_transform(raw, transform: str) -> float:
+    """Execute the declared transform string against raw and return the result."""
+    if not transform:
+        return raw
+    t = transform.lower()
+    # Walk the registered keywords in order; apply the first match found.
+    for kw, fn in _TRANSFORMS.items():
+        if kw in t:
+            return fn(raw)
+    # No recognised keyword: return raw unchanged (the display compare will
+    # catch the mismatch and report the error).
+    return raw
+
+
 def figure_matches(raw, transform, shown):
-    """Apply the declared transform to the raw source value and compare to shown.
-    Handles the % and $m forms; falls back to a loose numeric compare."""
+    """Apply the declared transform to the raw source value and compare to shown."""
     s = str(shown).strip()
+    effective = _apply_transform(raw, transform or "")
     try:
         if s.endswith("%"):
             target = float(s[:-1])
-            expected = round(raw * 100) if raw <= 1 else round(raw)
-            return abs(expected - target) <= 0.5
+            # After transform, effective should already be in % units.
+            # Support both: if transform was applied and result > 1, use directly;
+            # if raw was already a fraction and no transform matched, scale here.
+            if effective <= 1:
+                effective = effective * 100
+            return abs(round(effective) - target) <= 0.5
         if s.startswith("$") and s.lower().endswith("m"):
             target = float(s[1:-1])
-            return abs(round(raw, 1) - target) <= 0.05
+            return abs(round(effective, 1) - target) <= 0.05
         target = float(re.sub(r"[^\d.\-]", "", s))
-        return abs(raw - target) <= max(0.01, abs(target) * 0.01)
+        return abs(effective - target) <= max(0.01, abs(target) * 0.01)
     except (ValueError, TypeError):
         return False
 
@@ -121,15 +183,57 @@ def figure_errors(m):
 # ---- 4. the verification gate (blocks assembly) ----------------------------
 def assembly_blockers(m):
     b = []
+    # 4a. Storyline sign-off: log must contain a 'storyline signed off' action.
+    signed_off = any(
+        "storyline signed off" in (entry.get("action") or "").lower()
+        for entry in m.get("log", [])
+    )
+    if not signed_off:
+        b.append("gate: storyline has not been signed off (no 'storyline signed off' log entry)")
+
+    # 4b. Source verification + relevance (Edward's gate)
     for s in m.get("sources", []):
         if s.get("verification") != "verified":
             b.append(f"gate: source {s['source_id']} is {s.get('verification')} "
                      f"(claim: {s.get('claim', '')})")
         if s.get("relevance_ok") is not True:
             b.append(f"gate: source {s['source_id']} has not been judged relevant to its claim")
+
+    # 4c. Figure verification
     for f in m.get("figures", []):
         if f.get("verification") != "verified":
             b.append(f"gate: figure {f['figure_id']} ({f.get('shown')}) is {f.get('verification')}")
+
+    # 4d. Chart exhibits must have Cooper score >= pass mark and be frozen
+    for x in m.get("exhibits", []):
+        if x.get("type") != "chart":
+            continue
+        cooper = x.get("cooper") or {}
+        score = cooper.get("score")
+        frozen = cooper.get("frozen")
+        if score is None:
+            b.append(f"gate: exhibit {x['exhibit_id']} has no Cooper score - run score_rubric.py")
+        elif score < 8.0:
+            b.append(f"gate: exhibit {x['exhibit_id']} Cooper score {score} is below the 8.0 pass mark")
+        if not frozen:
+            b.append(f"gate: exhibit {x['exhibit_id']} Cooper chart is not frozen")
+
+    # 4e. All slides (except cover/closer) must be branded or frozen
+    SLIDE_READY = {"branded", "frozen"}
+    for s in m.get("slides", []):
+        if s.get("section") in ("cover",):
+            continue
+        if s.get("status") not in SLIDE_READY:
+            b.append(f"gate: slide {s['slide_id']} status is '{s.get('status')}' "
+                     f"(must be 'branded' or 'frozen' before assembly)")
+
+    # 4f. All exhibits must be branded or frozen
+    EXHIBIT_READY = {"branded", "frozen"}
+    for x in m.get("exhibits", []):
+        if x.get("status") not in EXHIBIT_READY:
+            b.append(f"gate: exhibit {x['exhibit_id']} status is '{x.get('status')}' "
+                     f"(must be 'branded' or 'frozen' before assembly)")
+
     return b
 
 

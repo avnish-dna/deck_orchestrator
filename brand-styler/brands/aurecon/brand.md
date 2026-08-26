@@ -13,3 +13,7 @@ Quirks the tokens can't express:
   Dark Green, Dark Blue, Yellow, Melon, Teal Blue, Accessible Green.
 - Cover/closer: Aurecon Grey `373A36` or Grey 5 `1C1B1C`, white content slides
   between them (the sandwich).
+- **Logo asset (`logo_mark.png`)**: must be a tightly cropped mark with a
+  transparent background, sized to fit the 1.6" × 0.53" logo box without
+  distortion. The full-slide cover image (`logo.png`, 4000×2250) is a separate
+  asset and must **not** be used as the `tokens.json` logo reference.

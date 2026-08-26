@@ -27,9 +27,15 @@ PASS_MARK = 8.0
 
 
 def rubric(ex):
-    """Pure mechanical rubric over one exhibit dict -> (score, fixes)."""
+    """Pure mechanical rubric over one exhibit dict -> (score, fixes).
+
+    Returns (0.0, fixes, True) when plotted_series is empty or missing, which
+    is a blocking data failure that cannot score above the pass mark.
+    """
     series = (ex.get("data_ref") or {}).get("plotted_series") or []
     fixes, score = [], 10.0
+    if not series:
+        return 0.0, ["data: plotted_series is empty or missing - no data to score"]
     if ex.get("emphasis") in (None, "") and len(series) > 1:
         score -= 1.0
         fixes.append("B4: no series carries the so-what - set an emphasis")

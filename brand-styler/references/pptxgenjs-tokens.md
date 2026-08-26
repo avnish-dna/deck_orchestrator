@@ -12,8 +12,15 @@ Load the pack once at the top of the generator script:
 const fs = require("fs");
 const path = require("path");
 
-// <pack> = the active brand, e.g. "aurecon" (from the manifest's meta.brand)
-const PACK_DIR = path.join(__dirname_of_this_skill, "brands", pack);
+// meta.brand is read from the manifest passed to this script.
+// manifest is assumed to be parsed before this block runs, e.g.:
+//   const manifest = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+const brand = manifest.meta.brand;   // e.g. "aurecon"
+
+// Resolve the brand-styler directory relative to this file's location.
+// Adjust BRAND_STYLER_ROOT if your layout differs.
+const BRAND_STYLER_ROOT = path.resolve(__dirname, "..", "brand-styler", "brands");
+const PACK_DIR = path.join(BRAND_STYLER_ROOT, brand);
 const T = JSON.parse(fs.readFileSync(path.join(PACK_DIR, "tokens.json"), "utf8"));
 
 const C = T.colors;               // C.accent, C.text, C.background, C.grey_2...
