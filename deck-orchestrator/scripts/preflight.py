@@ -37,12 +37,16 @@ def check(severity, name, ok, detail=""):
 def resolve_node_module(module_name: str, node: str | None) -> tuple[bool, str]:
     if not node:
         return False, "not checked - node is missing"
-    probe = subprocess.run(
-        [node, "-e", f"console.log(require.resolve({module_name!r}))"],
-        capture_output=True,
-        text=True,
-        cwd=REPO,
-    )
+    try:
+        probe = subprocess.run(
+            [node, "-e", f"console.log(require.resolve({module_name!r}))"],
+            capture_output=True,
+            text=True,
+            cwd=REPO,
+            timeout=30,
+        )
+    except subprocess.TimeoutExpired:
+        return False, f"timed out resolving {module_name}"
     if probe.returncode == 0:
         return True, probe.stdout.strip() or "resolvable"
     detail = (probe.stderr or probe.stdout).strip() or f"{module_name} is not resolvable"
