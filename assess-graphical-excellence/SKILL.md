@@ -11,9 +11,10 @@ grid, moiré vibration, dimensionality violation, etc.), and hand back the exact
 remedy plus the genre to switch to and an exemplar to emulate.
 
 The output is concrete and source-grounded because the model reasons over a
-single principles file (`references/tufte-principles.md`) that quotes VDQI by
-page. Generic "improve data-ink ratio" advice is the failure mode this skill is
-designed to avoid.
+single principles file (`../render-tufte-chart/references/tufte-principles.md`,
+shared with the sibling render skill so the two never drift) that quotes VDQI
+by page. Generic "improve data-ink ratio" advice is the failure mode this skill
+is designed to avoid.
 
 ## What you need from the user
 
@@ -23,7 +24,7 @@ assumption rather than stalling.
 
 ## How to assess (six-step workflow)
 
-Read `references/tufte-principles.md` first. The workflow uses every part of it.
+Read `../render-tufte-chart/references/tufte-principles.md` first. The workflow uses every part of it.
 
 1. **Score the nine criteria** (Part A). 0–10 each, with a chart-specific
    observation. Use VDQI's numeric anchors: e.g. data-ink ratio "0.1–0.2 is
@@ -80,7 +81,8 @@ Read `references/tufte-principles.md` first. The workflow uses every part of it.
      resemble. Optional.
 
 If the graphic plots a multi-year currency series, check B7. Use
-`scripts/deflate.py` (requires real CPI values; refuses to guess).
+`../render-tufte-chart/scripts/deflate.py` (requires real CPI values; refuses
+to guess).
 
 ## Output format
 
@@ -127,7 +129,8 @@ to build next, not a list of vague improvements.
 
 When this skill runs as the scoring stage of a deck pipeline, the labour splits:
 a **mechanical rubric owns the encodable rules** (missing data, series overload,
-absent emphasis - checked deterministically, never by a model) and this skill
+absent emphasis - checked deterministically by `scripts/score_rubric.py`, never
+by a model) and this skill
 supplies the **perceptual pass** - the judgement criteria no rubric can encode:
 can it be understood simply by this audience, do the direct labels work in this
 instance, and the default-challenge rule. The combined score is

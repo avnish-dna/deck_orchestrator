@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://aurecon.local/deck-orchestrator/manifest.schema.json",
+  "$id": "https://local/deck-orchestrator/manifest.schema.json",
   "title": "Deck Orchestrator Manifest",
-  "description": "Single source of truth for an orchestrated Aurecon deck build. Normalized, not nested: slides, exhibits, figures and sources are flat collections cross-referenced by id so each agent patches only its own rows. Schema validates shape and enums; cross-reference integrity and the gate rules (freeze override, verification-blocks-assembly, escalation caps) are enforced by the orchestrator, not here.",
+  "description": "Single source of truth for an orchestrated deck build. Normalized, not nested: slides, exhibits, figures and sources are flat collections cross-referenced by id so each agent patches only its own rows. Schema validates shape and enums; cross-reference integrity and the gate rules (freeze override, verification-blocks-assembly, escalation caps) are enforced by the orchestrator playbook and scripts/check_manifest.py, not here.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -30,9 +30,13 @@
         "title": {
           "type": "string"
         },
+        "brand": {
+          "type": "string",
+          "description": "Brand pack name resolved against brand-styler/brands/<name>/tokens.json. Drives the visual layer; swapping company = changing this field."
+        },
         "chassis_path": {
           "type": "string",
-          "description": "Path to the cleaned Aurecon .pptx chassis to build into."
+          "description": "Path to the cleaned .pptx chassis to build into."
         },
         "stage": {
           "$ref": "#/$defs/stage"
